@@ -4,6 +4,12 @@
 
 package frc.robot;
 
+import com.revrobotics.sim.SparkMaxSim;
+import com.revrobotics.spark.SparkMax;
+import com.revrobotics.spark.SparkLowLevel.MotorType;
+import com.revrobotics.spark.config.SparkMaxConfig;
+import com.revrobotics.spark.config.SparkBaseConfig.IdleMode;
+
 import edu.wpi.first.math.controller.PIDController;
 import edu.wpi.first.math.controller.SimpleMotorFeedforward;
 import edu.wpi.first.math.geometry.Pose2d;
@@ -18,7 +24,6 @@ import edu.wpi.first.math.system.plant.LinearSystemId;
 import edu.wpi.first.wpilibj.AnalogGyro;
 import edu.wpi.first.wpilibj.Encoder;
 import edu.wpi.first.wpilibj.RobotController;
-import edu.wpi.first.wpilibj.motorcontrol.PWMSparkMax;
 import edu.wpi.first.wpilibj.simulation.AnalogGyroSim;
 import edu.wpi.first.wpilibj.simulation.DifferentialDrivetrainSim;
 import edu.wpi.first.wpilibj.simulation.EncoderSim;
@@ -35,10 +40,20 @@ public class Drivetrain {
   private static final double kWheelRadius = 0.0508;
   private static final int kEncoderResolution = -4096;
 
-  private final PWMSparkMax m_leftLeader = new PWMSparkMax(1);
-  private final PWMSparkMax m_leftFollower = new PWMSparkMax(2);
-  private final PWMSparkMax m_rightLeader = new PWMSparkMax(3);
-  private final PWMSparkMax m_rightFollower = new PWMSparkMax(4);
+  private final SparkMax m_leftLeader = new SparkMax(10, MotorType.kBrushless);
+  private final SparkMax m_leftFollower = new SparkMax(11, MotorType.kBrushless);
+  private final SparkMax m_rightLeader = new SparkMax(20, MotorType.kBrushless);
+  private final SparkMax m_rightFollower = new SparkMax(21, MotorType.kBrushless);
+
+  private final SparkMaxConfig m_leftLeaderConfig = new SparkMaxConfig();
+  private final SparkMaxConfig m_leftFollowerConfig = new SparkMaxConfig();
+  private final SparkMaxConfig m_rightLeaderConfig = new SparkMaxConfig();
+  private final SparkMaxConfig m_rightFollowerConfig = new SparkMaxConfig();
+
+  // private final PWMSparkMax m_leftLeader = new PWMSparkMax(1);
+  // private final PWMSparkMax m_leftFollower = new PWMSparkMax(2);
+  // private final PWMSparkMax m_rightLeader = new PWMSparkMax(3);
+  // private final PWMSparkMax m_rightFollower = new PWMSparkMax(4);
 
   private final Encoder m_leftEncoder = new Encoder(0, 1);
   private final Encoder m_rightEncoder = new Encoder(2, 3);
@@ -59,6 +74,11 @@ public class Drivetrain {
   private final SimpleMotorFeedforward m_feedforward = new SimpleMotorFeedforward(1, 3);
 
   // Simulation classes help us simulate our robot
+  private final SparkMaxSim m_leftLeaderSim = new SparkMaxSim(m_leftLeader, DCMotor.getNEO(1));
+  private final SparkMaxSim m_leftFollowerSim = new SparkMaxSim(m_leftFollower, DCMotor.getNEO(1));
+  private final SparkMaxSim m_rightLeaderSim = new SparkMaxSim(m_rightLeader, DCMotor.getNEO(1));
+  private final SparkMaxSim m_rightFollowerSim = new SparkMaxSim(m_rightFollower, DCMotor.getNEO(1));
+
   private final AnalogGyroSim m_gyroSim = new AnalogGyroSim(m_gyro);
   private final EncoderSim m_leftEncoderSim = new EncoderSim(m_leftEncoder);
   private final EncoderSim m_rightEncoderSim = new EncoderSim(m_rightEncoder);
@@ -67,17 +87,21 @@ public class Drivetrain {
       LinearSystemId.identifyDrivetrainSystem(1.98, 0.2, 1.5, 0.3);
   private final DifferentialDrivetrainSim m_drivetrainSimulator =
       new DifferentialDrivetrainSim(
-          m_drivetrainSystem, DCMotor.getCIM(2), 8, kTrackWidth, kWheelRadius, null);
+          m_drivetrainSystem, DCMotor.getNEO(2), 8, kTrackWidth, kWheelRadius, null);
 
   /** Subsystem constructor. */
   public Drivetrain() {
-    m_leftLeader.addFollower(m_leftFollower);
-    m_rightLeader.addFollower(m_rightFollower);
+    m_leftLeaderConfig.idleMode(IdleMode.kCoast);
+    m_leftLeaderConfig.smartCurrentLimit(60);
+    m_leftLeaderConfig.inverted(false);
 
-    // We need to invert one side of the drivetrain so that positive voltages
-    // result in both sides moving forward. Depending on how your robot's
-    // gearbox is constructed, you might have to invert the left side instead.
-    m_rightLeader.setInverted(true);
+    m_leftFollowerConfig.apply(m_leftLeaderConfig);
+
+    m_rightLeaderConfig.idleMode(IdleMode.kCoast);
+    m_rightLeaderConfig.smartCurrentLimit(60);
+    m_rightLeaderConfig.inverted(true);
+
+    m_rightFollowerConfig.apply(m_rightLeaderConfig);
 
     // Set the distance per pulse for the drive encoders. We can simply use the
     // distance traveled for one rotation of the wheel divided by the encoder
@@ -88,7 +112,6 @@ public class Drivetrain {
     m_leftEncoder.reset();
     m_rightEncoder.reset();
 
-    m_rightLeader.setInverted(true);
     SmartDashboard.putData("Field", m_fieldSim);
   }
 
@@ -142,7 +165,9 @@ public class Drivetrain {
     m_drivetrainSimulator.setInputs(
         m_leftLeader.get() * RobotController.getInputVoltage(),
         m_rightLeader.get() * RobotController.getInputVoltage());
+    m_leftLeaderSim.iterate(kMaxAngularSpeed, 12, 0.02);
     m_drivetrainSimulator.update(0.02);
+
 
     m_leftEncoderSim.setDistance(m_drivetrainSimulator.getLeftPositionMeters());
     m_leftEncoderSim.setRate(m_drivetrainSimulator.getLeftVelocityMetersPerSecond());
